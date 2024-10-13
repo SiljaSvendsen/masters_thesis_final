@@ -8,10 +8,14 @@ import math
 import pandas as pd
 import seaborn as sns
 from matplotlib.patches import Patch
+import glob
+import os
 
 import numpy as np
 
 # Equations and parametes
+
+# par0 only for GN and GNE
 par0 = {
     'basal_N':1,
     'basal_G':1,# 0.5/20,
@@ -36,7 +40,7 @@ par0 = {
     'FGF' : 0.85, # we will be varying this parameter below.
     'scaleMutualRepression' : 3.5
 }
-
+# par0909 for GN, GNE, GNEO1 and GNEO2
 par0909= {
     'basal_N':1,
     'basal_G':1,# 0.5/20,
@@ -755,12 +759,468 @@ def show_nine_subplots(data, mean, var, title, title_subplots, filename=None, sa
     plt.show()
 
 
+# boxplots
+def load_data_w_glob(directory_path, file_pattern):
+    """
+    directory_path: string, directory path
+    file_pattern: string, common part of the filenames
+    """
+
+    # Combine the directory path with the file pattern
+    files = glob.glob(os.path.join(directory_path, file_pattern))
+
+    # Read and concatenate the CSV files
+    dataframes = []
+
+    for file in files:
+        df = pd.read_csv(file)
+        dataframes.append(df)
+    
+    return pd.concat(dataframes, ignore_index=True)
+
+def velocity_boxplots(dataframe,
+                      date,
+                      networks=["GN", "GNE"],
+                      font_size=30, #titles, axis labels
+                      font_size_legend=14,
+                      shift=0.2,
+                      box_width=0.3,
+                      savefig=False
+                     ):
+    """
+    dataframe has to contain the following categories:
+    network, rel change, velocity, parameter, condition 1, condition2
+    
+    the categories have to contain the following values
+    network = GN, GNE, GNEO1, GNEO2 (string)
+    parameter = ['alphaGN','alphaEO','KaaNG','KmiNG', 'KmiEN',
+                 'KNEG','KEG','KOG','KmaON','KmaOE']
+    
+    input:
+    -----
+    networks = ["GN", "GNE"] or ["GN", "GNE", "GNEO1", "GNEO2"]
+    the restriction of options is due to the legend_elements (legend)
+    
+    output:
+    ------
+    grouped boxplots of velocity data.
+    
+    """
+    # 0. settings for the plots
+    
+    # custom color palette
+    custom_palette = {'GN': 'red',
+                      'GNE': 'green',
+                      'GNEO1': 'blue',
+                      'GNEO2':'orange'
+                     }
+    if networks==["GN", "GNE"]:
+        parameters_of_interest=["alphaGN", "alphaEO", "KaaNG","KmiNG", 
+                                "KmiEN", "KNEG", "KEG"]
+        
+        # legends
+        legend_elements = [Patch(facecolor="red", edgecolor="red", label="GN-F"),
+                       Patch(facecolor="green", edgecolor="green", label="GNE-F"),
+                       Patch(facecolor="gray", edgecolor="gray", label=r"non bi-stable"),
+                       Patch(facecolor="white", edgecolor="gray", hatch="//",label=r"rel. change (SFP) > 20 %")
+                      ]
+        # figure titles
+        figure_titles = [r"$\alpha_G$, $\alpha_N$",
+                         r"$\alpha_E$",
+                         "$K_{GG}$, $K_{NN}$",
+                         "$K_{GN}$, $K_{NG}$",
+                         "$K_{EN}$, $K_{NE}$",
+                         "$K_{NEG}$",
+                         "$K_{EG}$"
+                         ]
+    
+    if networks==["GN", "GNE", "GNEO1", "GNEO2"]:
+        parameters_of_interest=['alphaGN','alphaEO','KaaNG',
+                                'KmiNG', 'KmiEN','KNEG','KEG',
+                                'KOG','KmaON','KmaOE']
+        # legends
+        legend_elements = [Patch(facecolor="red", edgecolor="red", label="GN-F"),
+                           Patch(facecolor="green", edgecolor="green", label="GNE-F"),
+                           Patch(facecolor="blue", edgecolor="blue", label="GNEO 1"),
+                           Patch(facecolor="orange", edgecolor="orange", label="GNEO 2"),
+                           Patch(facecolor="gray", edgecolor="gray", label=r"non bi-stable"),
+                           Patch(facecolor="white", edgecolor="gray", hatch="//",label=r"rel. change (SFP) > 20 %")
+                          ]
+        # figure titles
+        figure_titles = [r"$\alpha_G$, $\alpha_N$",
+                         r"$\alpha_E$",
+                         "$K_{GG}$, $K_{NN}$",
+                         "$K_{GN}$, $K_{NG}$",
+                         "$K_{EN}$, $K_{NE}$",
+                         "$K_{NEG}$",
+                         "$K_{EG}$",
+                         "$K_{OG}$",
+                         "$K_{ON}$, $K_{NO}$",
+                         "$K_{OE}$,$K_{EO}$"
+                        ]
+    
+    # 1. prepare dataframe
+    velocity_df = dataframe[["network", "rel change", "velocity", "parameter", "condition 1", "condition 2"]]
+
+    # filter for parameters only relevant to networks involved
+    mask0 = velocity_df["parameter"].isin(parameters_of_interest)
+    mask1 = velocity_df["network"].isin(networks)
+    df_masked= velocity_df[mask0&mask1]
+    
+    # 2. plot figures
+    for parameter, title in zip(parameters_of_interest,figure_titles):
+        
+        # 0. create new figure
+        fig, ax = plt.subplots(figsize=(10,6))
+    
+        # 1. create grouped boxplot
+    
+        # 1.1 filter for parameter
+        mask = df_masked["parameter"]==parameter
+    
+        # 1.2 ensure the categorical order for 'network' (hue) is explicitly set + sort_values("network")
+        df_masked.loc[:,'network'] = pd.Categorical(df_masked['network'], categories=networks, ordered=True)
+        df_masked_param=df_masked[mask].sort_values("network")
+    
+        sns.boxplot(x="rel change",
+                    y="velocity",
+                    hue="network",
+                    hue_order=networks,
+                    data=df_masked_param,
+                    palette=custom_palette,
+                    ax=ax
+                   )
+    
+        # 2. indicate non bi-stability and disagreement with reference sfp
+        ymax = np.max(df_masked["velocity"]) + 0.5
+        ymin = np.min(df_masked["velocity"]) - 0.5
+
+        dx_arr = np.linspace(-shift, shift, len(networks))
+
+        for network, dx in zip(networks, dx_arr):
+            
+            df_network = df_masked_param[df_masked_param["network"]==network]
+            
+            
+            # Indicate non-bistability
+            # x_pos = rel change values at which condition 1 is not True.
+            x_pos=df_network[df_network["condition 1"] != True]["rel change"].unique()
+            for x in x_pos:
+                # all_pos = all rel change at which the PSA is performed. due to .index, it has to be a list.
+                all_pos = np.sort(df_masked["rel change"].unique()).tolist()
+                box_position = all_pos.index(x) + dx
+                
+                # Shade the area behind the boxplot
+                ax.fill_betweenx([ymin ,ymax],
+                             box_position - box_width/2,
+                             box_position + box_width/2,
+                             color="gray", alpha=0.2)
+                
+            # indicate disagreement with reference sfp
+            x_pos = df_network[df_network["condition 2"] != True]["rel change"].unique().tolist()
+            
+            for x in x_pos:
+                all_pos = np.sort(df_masked["rel change"].unique()).tolist()
+                box_position = all_pos.index(x) + dx
+                
+                # Striped Shade the area behind the boxplot
+                ax.bar(box_position,
+                       ymax - ymin,
+                       width=box_width, 
+                       bottom=ymin,
+                       color='none',
+                       edgecolor='gray',
+                       hatch='//', linewidth=0, alpha=0.3)
+    
+        # 4. title, axis labels, legends
+        ax.set_title(f"{title}", fontsize=font_size)
+        ax.set_xlabel("Relative Change", fontsize=font_size)
+        ax.set_ylabel("Velocity", fontsize=font_size)
+    
+        ax.legend(handles=legend_elements, loc="best", fontsize=font_size_legend)
+    
+        # 5. adjust y-axis (ymin, ymax, logscale)
+        ymax = np.max(velocity_df["velocity"]) + 0.5
+        ymin = np.min(velocity_df["velocity"])
+    
+        if ymin < 0: # avoid trouble with logscale
+            ymin=0
+            
+        ax.set_ylim(ymin, ymax)
+        ax.set_yscale("log")
+    
+        # 6. adjust figure
+        plt.tight_layout()
+    
+        # 7. save figures
+        if savefig:
+            plt.savefig(f"velocity_boxplots_{networks}_{parameter}_{date}.pdf", dpi=600)
+
+def time_delay_boxplots(dataframe,
+                        date="241010",
+                        networks=["GNEvGN"],
+                        font_size=30, #titles and axis labels,
+                        font_size_legend=20,
+                        shift=0,
+                        box_width=0.3,dy=0,
+                        savefig=True):
+    """
+    dataframe needs to contain the following categories:
+    two_networks, parameter, rel change, condition 1, condition 2, time diff.
+    
+    the categories have to contain following values
+    two_networks = GNEvGN, GNEO1vGN, GNEO2vGN
+    parameter = ['alphaGN','alphaEO','KaaNG','KmiNG', 'KmiEN','KNEG','KEG','KOG','KmaON','KmaOE']
+    
+    input:
+    ------
+    networks=["GNEvGN"] or ['GNEvGN','GNEO1vGN','GNEO2vGN']
+    
+    output:
+    -------
+    grouped boxplots of time delay data.
+    """
+    
+    # 0. Settings for the plots
+    # Custom color palette
+    custom_palette = {'GNEvGN': "green",
+                      'GNEO1vGN':"blue",
+                      'GNEO2vGN':"orange"}
+
+    if networks==["GNEvGN"]: # if only GN and GNE
+        parameters_of_interest=["alphaGN", "alphaEO", "KaaNG",
+                                "KmiNG", "KmiEN", "KNEG", "KEG"]
+
+        #legends
+        legend_elements = [Patch(facecolor="green", edgecolor="green", label=r"$\Delta\tau_{GNE-GN}$"),
+                           Patch(facecolor="gray", edgecolor="gray", label=r"non bi-stable"),
+                           Patch(facecolor="white", edgecolor="gray", hatch="//",label=r"rel. change (SFP) > 20 %")
+                          ]
+
+
+        # Costum figure titles
+        figure_titles = [r"$\alpha_G$, $\alpha_N$",
+                         r"$\alpha_E$",
+                         "$K_{GG}$, $K_{NN}$",
+                         "$K_{GN}$, $K_{NG}$",
+                         "$K_{EN}$, $K_{NE}$",
+                         "$K_{NEG}$",
+                         "$K_{EG}$"
+                        ]
+
+        filename_key = parameters_of_interest
+
+    if networks==['GNEvGN','GNEO1vGN','GNEO2vGN']: # compare all networks to GN
+        
+        parameters_of_interest=['alphaGN','alphaEO','KaaNG',
+                                'KmiNG', 'KmiEN','KNEG','KEG',
+                                'KOG','KmaON','KmaOE']
+
+        #legend
+        legend_elements = [Patch(facecolor="green", edgecolor="green", label=r"$\Delta\tau_{GNE-GN}$"),
+                           Patch(facecolor="blue", edgecolor="blue", label=r"$\Delta\tau_{GNEO1-GN}$"),
+                           Patch(facecolor="orange", edgecolor="orange", label=r"$\Delta\tau_{GNEO2-GN}$"),
+                           Patch(facecolor="gray", edgecolor="gray", label=r"non bi-stable"),
+                           Patch(facecolor="white", edgecolor="gray", hatch="//",label=r"rel. change (SFP) > 20 %")
+                          ]
+
+
+        # Costum figure titles
+        figure_titles = [r"$\alpha_G$, $\alpha_N$",
+                         r"$\alpha_E$",
+                         "$K_{GG}$, $K_{NN}$",
+                         "$K_{GN}$, $K_{NG}$",
+                         "$K_{EN}$, $K_{NE}$",
+                         "$K_{NEG}$",
+                         "$K_{EG}$",
+                         "$K_{OG}$",
+                         "$K_{ON}$, $K_{NO}$",
+                         "$K_{OE}$,$K_{EO}$"
+                        ]
+
+        filename_key = parameters_of_interest
+
+        
+    # 0. prepare dataframe
+    #filter for parameters only relevant to the GN and GNE network
+    mask0 = dataframe["parameter"].isin(parameters_of_interest)
+    mask1 = dataframe["two_networks"].isin(networks)
+
+    df_masked = dataframe[mask0&mask1]
+    
+    # Plot the figure
+    
+    for parameter, title in zip(filename_key,figure_titles):
+    
+    
+        # 0. create new figure
+        fig, ax = plt.subplots(figsize=(10,6))
+    
+        # 1.0 clarify if time diff is positive or negative
+        ax.axhline(y=0.0, color='gray', linestyle='-', zorder=0)
+    
+        
+        # 1.1 create grouped boxplot
+        # 1.2 filter for parameter
+        mask = df_masked["parameter"]==parameter
+    
+        # 1.3 ensure the categorical order for 'network' (hue) is explicitly set + sort_values("network")
+        df_masked.loc[:,'two_networks'] = pd.Categorical(df_masked['two_networks'], categories=networks, ordered=True)
+        df_masked_param=df_masked[mask].sort_values("two_networks")
+
+        sns.boxplot(x="rel change",
+                y="time diff",
+                hue="two_networks",
+                hue_order=networks,  # enforce order here
+                data=df_masked_param,
+                palette=custom_palette,
+                ax=ax
+               )
+    
+        # 2. indicate non bi-stability and disagreement with reference sfp
+        ymax = np.max(df_masked["time diff"]) + 0.5
+        ymin = np.min(df_masked["time diff"]) - dy
+
+        dx_arr = np.linspace(-shift, shift, len(networks))
+
+        for network, dx in zip(networks, dx_arr):
+        
+            df_network = df_masked_param[df_masked_param["two_networks"]==network]
+        
+        
+            # Indicate non-bistability
+            # x_pos = rel change values at which condition 1 is not True.
+            x_pos=df_network[df_network["condition 1"] == False]["rel change"].unique()
+            for x in x_pos:
+                # all_pos = all rel change at which the PSA is performed. due to .index, it has to be a list.
+                all_pos = np.sort(df_masked["rel change"].unique()).tolist()
+                box_position = all_pos.index(x) + dx
+            
+                # Shade the area behind the boxplot
+                ax.fill_betweenx([ymin ,ymax],
+                         box_position - box_width/2,
+                         box_position + box_width/2,
+                         color="gray", alpha=0.2)
+            
+            # indicate disagreement with reference sfp
+            x_pos = df_network[df_network["condition 2"] == False]["rel change"].unique().tolist()
+        
+            for x in x_pos:
+                all_pos = np.sort(df_masked["rel change"].unique()).tolist()
+                box_position = all_pos.index(x) + dx
+                
+                # Striped Shade the area behind the boxplot
+                ax.bar(box_position,
+                       ymax - ymin,
+                       width=box_width, 
+                       bottom=ymin,
+                       color='none',
+                       edgecolor='gray',
+                       hatch='//', linewidth=0, alpha=0.3)
+    
+        # 4. title, axis labels, legends
+        ax.set_title(f"{title}", fontsize=font_size)
+        ax.set_xlabel("Relative Change", fontsize=font_size)
+        ax.set_ylabel(r"$\Delta\tau$", fontsize=font_size)
+    
+        ax.legend(handles=legend_elements, loc="lower left", fontsize=font_size_legend)
+    
+        # 5. adjust y-axis (ymin, ymax)
+        ymax = np.max(dataframe["time diff"])
+        ymin = np.min(dataframe["time diff"])-dy
+        ax.set_ylim(ymin, ymax)
+    
+        # 6. adjust figure
+        plt.tight_layout()
+    
+        # 7. save figures
+        if savefig:
+            plt.savefig(f"timedelay_boxplots_{networks}_{parameter}_{date}.pdf", dpi=600)
+
+
+# Bifurcation diagrams, on sampled data
+def bifurcation_diagram_of_sampled_data_relchange(df_network, # non-defualt
+                                                  model,
+                                                  dim,
+                                                  date, #string, non-defualt
+                                                  parameter, # non-defualt
+                                                  parameter1,# non-dedualt
+                                                  par=par0, # dictionary, defualt
+                                                  n = 30, # defualt, len of bifur_range
+                                                  savefile=False
+                                                 ):
+    """
+    par : dict, has to contain "wf_G", "wf_N", "K_NG", and "K_GN"
+    parameter = "alphaGN" or "KmiNG"
+    paramter1 = "wf_G" or "K_GN"
+    """
+    
+    ref = par[parameter1]
+    network = df_network["network"].unique()[0] # for readability
+
+    # filter for a particular parameter of interest
+    df_network_param = df_network[df_network["parameter"]==parameter]
+
+    # bifurcation range = rel change range but more fine grained (25 points).
+    bifur_low_range = np.arange(min(df_network_param["rel change"]), 0.5, 0.05) 
+    bifur_high_range = np.linspace(0.5, max(df_network_param["rel change"]),n)
+    
+    bifur_range = np.concatenate((bifur_low_range,bifur_high_range))
+
+    # removes duplicate ic points, resets index, and go from pd.df to np arr enables slicing
+    ics = df_network_param[["ic gata6", "ic nanog", "ic esrrb"]].drop_duplicates().reset_index(drop=True).to_numpy()
+
+    all_data = []
+    for bifur in bifur_range:
+        # update bifurcation parameter
+        if parameter1=="wf_G":
+            par["wf_N"]=par[parameter1]=bifur*ref
+        if parameter1=="K_GN":
+            par["K_NG"]=par["K_GN"]=bifur*ref
+
+        for ic in ics:
+            # deal with shape of ics...
+            if dim==2:
+                ic = ic[:dim]
+                esrrb=0
+            if dim==3:
+                ic = ic[:dim]
+                esrrb=ic[dim-1]
+            
+            # calculate steady state
+            ss, time_ss=sample_delay_time(ic=ic, parameters=par0, model=model)
+            
+            # deal with shape of ss...
+            if dim==2:
+                ss_esrrb=0
+            if dim==3:
+                ss_esrrb=ss[2]
+
+            # sample data
+            data = {"ic gata6": ic[0],
+                    "ic nanog": ic[1],
+                    "ic essrb": esrrb,
+                    "ss gata6": ss[0],
+                    "ss nanog": ss[1],
+                    "ss esrrb": ss_esrrb,
+                    "rel change": bifur,
+                    "parameter": parameter,
+                    "network":network,
+                   }
+            
+            # append data dictionary to all_data list
+            all_data.append(data)
+            
+    df_all_data = pd.DataFrame(all_data)
+
+    if savefile:
+        # Save the DataFrame to a CSV file
+        df_all_data.to_csv(f'{network}_{parameter}_{date}.csv', index=False)  
+        print("DONE") 
 
 
 
-# Bifurcation diagrams
-                        
-
+# Bifurcation diagram, general
 def func_nullclines(model_2D, par, t=0, x_start=0, x_stop=50, y_start=0, y_stop=50, curve_step=100):
     """
     29/07/24
