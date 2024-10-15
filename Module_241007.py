@@ -1139,64 +1139,71 @@ def time_delay_boxplots(dataframe,
 
 
 # Bifurcation diagrams, on sampled data
-def bifurcation_diagram_of_sampled_data_relchange(df_network, # non-defualt
+def bifurcation_diagram_of_sampled_data_relchange(df_network, # non-default
                                                   model,
                                                   dim,
-                                                  date, #string, non-defualt
-                                                  parameter, # non-defualt
-                                                  parameter1,# non-dedualt
-                                                  par=par0, # dictionary, defualt
-                                                  n = 30, # defualt, len of bifur_range
+                                                  date, # string, non-default
+                                                  parameter, # non-default
+                                                  parameter1, # non-default
+                                                  par=None, # this will default to None and we use par0.copy()
+                                                  n=40, # default, length of bifur_range
                                                   savefile=False
                                                  ):
     """
     par : dict, has to contain "wf_G", "wf_N", "K_NG", and "K_GN"
     parameter = "alphaGN" or "KmiNG"
-    paramter1 = "wf_G" or "K_GN"
+    parameter1 = "wf_G" or "K_GN"
     """
+
+    # If par is not provided, use a copy of par0 to avoid modifying the original dictionary
+    if par is None:
+        par = par0.copy()  # Shallow copy of par0 to avoid changing the original object
+
+    ref = par.copy()  # Shallow copy of par to restore during iteration
+    refpar = ref[parameter1]
     
-    ref = par[parameter1]
-    network = df_network["network"].unique()[0] # for readability
-
-    # filter for a particular parameter of interest
-    df_network_param = df_network[df_network["parameter"]==parameter]
-
-    # bifurcation range = rel change range but more fine grained (25 points).
-    bifur_low_range = np.arange(min(df_network_param["rel change"]), 0.5, 0.05) 
-    bifur_high_range = np.linspace(0.5, max(df_network_param["rel change"]),n)
+    print("Initial refpar:", refpar)  # Debugging print to check initial value
     
-    bifur_range = np.concatenate((bifur_low_range,bifur_high_range))
+    network = df_network["network"].unique()[0]  # For readability
 
-    # removes duplicate ic points, resets index, and go from pd.df to np arr enables slicing
+    # Filter for a particular parameter of interest
+    df_network_param = df_network[df_network["parameter"] == parameter]
+
+    # Bifurcation range = rel change range but more fine-grained (25 points).
+    bifur_range = np.logspace(np.log2(min(df_network_param["rel change"])), 
+                              np.log2(max(df_network_param["rel change"])), 
+                              num=n, base=2)
+
+    # Remove duplicate IC points, reset index, and go from pd.df to np array to enable slicing
     ics = df_network_param[["ic gata6", "ic nanog", "ic esrrb"]].drop_duplicates().reset_index(drop=True).to_numpy()
 
     all_data = []
     for bifur in bifur_range:
-        # update bifurcation parameter
-        if parameter1=="wf_G":
-            par["wf_N"]=par[parameter1]=bifur*ref
-        if parameter1=="K_GN":
-            par["K_NG"]=par["K_GN"]=bifur*ref
+        # Update bifurcation parameter
+        if parameter1 == "wf_G":
+            par["wf_N"] = par[parameter1] = bifur * refpar
+        if parameter1 == "K_GN":
+            par["K_NG"] = par[parameter1] = bifur * refpar
 
         for ic in ics:
-            # deal with shape of ics...
-            if dim==2:
+            # Deal with shape of ics...
+            if dim == 2:
                 ic = ic[:dim]
-                esrrb=0
-            if dim==3:
+                esrrb = 0
+            if dim == 3:
                 ic = ic[:dim]
-                esrrb=ic[dim-1]
+                esrrb = ic[dim-1]
             
-            # calculate steady state
-            ss, time_ss=sample_delay_time(ic=ic, parameters=par0, model=model)
+            # Calculate steady state
+            ss, time_ss = sample_delay_time(ic=ic, parameters=par, model=model)
             
-            # deal with shape of ss...
-            if dim==2:
-                ss_esrrb=0
-            if dim==3:
-                ss_esrrb=ss[2]
+            # Deal with shape of ss...
+            if dim == 2:
+                ss_esrrb = 0
+            if dim == 3:
+                ss_esrrb = ss[2]
 
-            # sample data
+            # Sample data
             data = {"ic gata6": ic[0],
                     "ic nanog": ic[1],
                     "ic essrb": esrrb,
@@ -1205,19 +1212,117 @@ def bifurcation_diagram_of_sampled_data_relchange(df_network, # non-defualt
                     "ss esrrb": ss_esrrb,
                     "rel change": bifur,
                     "parameter": parameter,
-                    "network":network,
+                    "network": network,
                    }
             
-            # append data dictionary to all_data list
+            # Append data dictionary to all_data list
             all_data.append(data)
-            
+        
+        # Reset par to the shallow copy of the original ref dictionary
+        par = ref.copy()
+        if parameter1=="wf_G":
+            par["wf_N"] = par["wf_G"] = par[parameter1]  # Ensure wf_N gets reset as well
+        if parameter1=="K_GN":
+            par["K_NG"] = par["K_GN"] = par[parameter1]
+    
+    # From dict to pandas dataframe
     df_all_data = pd.DataFrame(all_data)
 
-    if savefile:
-        # Save the DataFrame to a CSV file
+    if savefile: # Save the DataFrame to a CSV file
         df_all_data.to_csv(f'{network}_{parameter}_{date}.csv', index=False)  
-        print("DONE") 
+        print("DONE")
 
+
+def plot_bifurcation_diagram_gata_nanog_alpha_kmiNG(dataframe,
+                                                    filename_figure,
+                                                    date,
+                                                    font_size=14, #default
+                                                    ymax=70, # default, but adjust when plotting
+                                                    savefig=False):
+    """
+    14.okt.2024
+    plots the bifurcation diagram to show how sensitive GN and GNE is to alphaGN and kmiNG regarding
+    bistability and robustness in stable fixed points.
+    
+    Input:
+    ------
+    dataframe: pandas dataframe, contain categories "rel change", "ss gata6", and "ss nanog"
+    filename_figure: string, filename of figure (if savefig=True)
+    date: string, part of the filename
+    font_size: int, fontsize of the title, axis, and legends
+    ymax: int, ymax
+    savefig: boolean, if True, the figure is saved as a pdf file, dpi=600
+    
+    Output:
+    ------
+    a bifurcation diagram with alphaNG or kmiNG as the bifurcation parameter.
+    note: Specify the bifurcation parameter in the filename
+    """
+
+    # Annotate the lines
+    def annotate_axhline(text, y, ax, x=np.log2(0.12)):
+        """
+        text: str, annotation text
+        x, y: float, position of the annotation
+        ax: specify ax (the subplot)
+        """
+    
+        ax.annotate(f"{text}", xy=(0.5, y), xycoords='data', 
+                    fontsize=12, color="gray", 
+                    xytext=(x, y),  # Position on top of the line
+                    textcoords='data',  # Keep the x-coordinate in data coordinates
+                    verticalalignment='center',
+                    horizontalalignment='center',
+                    bbox=dict(facecolor='white', edgecolor='none', pad=2.0))  # White background box
+    # 0. data
+    x = dataframe["rel change"]
+    gata6 = dataframe["ss gata6"]
+    nanog = dataframe["ss nanog"]
+
+    # NB: I take log2 of both all data and tickslabels to "zoom" in on the region
+    # rel change in [0.2, 1.0] to highlight the bifurcation (from mono- to bi-stable)
+    # Most importantly; the values on axis and labelling are correct.
+
+    # 1. create figure and plot data
+    fig, ax = plt.subplots(figsize=(4,6)) 
+    ax.plot(np.log2(x), np.log2(gata6), ".",color="red", label="Gata6")
+    ax.plot(np.log2(x), np.log2(nanog),".",color="green", label="Nanog")
+
+    # 2. Add reference case
+    # The reference Epi and PrE states are at
+    # (Gata6, Nanog)=[ 1.10273171 11.46535802] and (Gata6, Nanog)=[13.62042978 2.41356951]
+
+    # 2.1 plot Epi reference
+    ax.axhline(y=np.log2(1.10273171),color="gray", linestyle="--", label="Epi")  # gata6
+    ax.axhline(y=np.log2(11.46535802), color="gray", linestyle="--") # nanog
+
+    # 2.2 plot PrE refernce
+    ax.axhline(y=np.log2(13.62042978), color="gray", linestyle=":", label="PrE") # gata6
+    ax.axhline(y=np.log2(2.41356951),color="gray", linestyle=":") # nanog
+
+    # 2.3 add annotations
+    for text_i, y_i in zip(["Gata6", "Nanog", "Gata6", "Nanog"],[1.10273171,11.46535802,13.62042978,2.41356951]):
+        annotate_axhline(text=text_i,y=np.log2(y_i), ax=ax)
+
+    # 3. title, axis label, legend
+    ax.set_title(f"{dataframe['network'].unique()[0]}")
+    ax.set_xlabel("Relative change", fontsize=font_size)
+    ax.set_ylabel("Concentration", fontsize=font_size)
+    plt.legend(ncol=2, loc="upper left",fontsize=font_size)
+    
+    # 4. costumise ticks
+    ytick_labels = [0.025*ymax, 0.05*ymax, 0.1*ymax,0.25*ymax, 0.5*ymax, ymax ]
+    ytick = ax.set_yticks(ticks=np.log2(ytick_labels), labels=ytick_labels)
+    xtick_labels = [0.2, 0.25, 0.5, 0.75, 1.0, 1.25,2, 3, 4, 5]
+    xtick=ax.set_xticks(ticks=np.log2(xtick_labels), labels=xtick_labels, rotation=45)
+    
+    # 5. Adjust figure
+    ax.set_xlim(np.log2(0.07), np.log2(5))
+    plt.tight_layout()
+
+    # 6. save figure
+    if savefig:
+        plt.savefig(f"bifurcation_diagram_{filename_figure}_{date}.pdf", dpi=600)
 
 
 # Bifurcation diagram, general
