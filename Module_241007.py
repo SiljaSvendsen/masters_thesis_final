@@ -1238,7 +1238,8 @@ def plot_bifurcation_diagram_gata_nanog_alpha_kmiNG(dataframe,
                                                     date,
                                                     font_size=14, #default
                                                     ymax=70, # default, but adjust when plotting
-                                                    savefig=False):
+                                                    savefig=False,
+                                                    pdf=True):
     """
     14.okt.2024
     plots the bifurcation diagram to show how sensitive GN and GNE is to alphaGN and kmiNG regarding
@@ -1285,8 +1286,8 @@ def plot_bifurcation_diagram_gata_nanog_alpha_kmiNG(dataframe,
 
     # 1. create figure and plot data
     fig, ax = plt.subplots(figsize=(4,6)) 
-    ax.plot(np.log2(x), np.log2(gata6), ".",color="red", label="Gata6")
-    ax.plot(np.log2(x), np.log2(nanog),".",color="green", label="Nanog")
+    ax.plot(np.log2(x), np.log2(gata6), ".",color="red", label="GATA6")
+    ax.plot(np.log2(x), np.log2(nanog),".",color="green", label="NANOG")
 
     # 2. Add reference case
     # The reference Epi and PrE states are at
@@ -1301,13 +1302,13 @@ def plot_bifurcation_diagram_gata_nanog_alpha_kmiNG(dataframe,
     ax.axhline(y=np.log2(2.41356951),color="gray", linestyle=":") # nanog
 
     # 2.3 add annotations
-    for text_i, y_i in zip(["Gata6", "Nanog", "Gata6", "Nanog"],[1.10273171,11.46535802,13.62042978,2.41356951]):
+    for text_i, y_i in zip(["GATA6 ", "NANOG", "GATA6 ", "NANOG"],[1.10273171,11.46535802,13.62042978,2.41356951]):
         annotate_axhline(text=text_i,y=np.log2(y_i), ax=ax)
 
     # 3. title, axis label, legend
     ax.set_title(f"{dataframe['network'].unique()[0]}")
-    ax.set_xlabel("Relative change", fontsize=font_size)
-    ax.set_ylabel("Concentration", fontsize=font_size)
+    ax.set_xlabel("Relative Change", fontsize=font_size)
+    ax.set_ylabel("Protein Level", fontsize=font_size)
     plt.legend(ncol=2, loc="upper left",fontsize=font_size)
     
     # 4. costumise ticks
@@ -1321,8 +1322,10 @@ def plot_bifurcation_diagram_gata_nanog_alpha_kmiNG(dataframe,
     plt.tight_layout()
 
     # 6. save figure
-    if savefig:
+    if savefig and pdf:
         plt.savefig(f"bifurcation_diagram_{filename_figure}_{date}.pdf", dpi=600)
+    if savefig and pdf==False:
+        plt.savefig(f"bifurcation_diagram_{filename_figure}_{date}.png", dpi=600)
 
 
 # Bifurcation diagram, general
