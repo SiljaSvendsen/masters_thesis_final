@@ -6,6 +6,7 @@ from scipy.optimize import root, fsolve
 import scipy.stats as stats
 from scipy.stats import shapiro
 from scipy.stats import mannwhitneyu
+from scipy.stats import wilcoxon
 # analytic solutions
 import sympy as sb
 import math
@@ -1856,3 +1857,70 @@ def MW_test(df_compare,
     # Export the DataFrame to a CSV file
     df_mannwhitney_results.to_csv(f"MW_results_{datatype}_{df_compare[networktype].unique()[0]}_{df_ref[networktype].unique()[0]}_{date}.csv", index=False)
     print(f"Mann-Whitney U test results are saved to MW_results_{datatype}_{df_compare[networktype].unique()[0]}_{df_ref[networktype].unique()[0]}_{date}.csv ")
+
+def wilcoxon_test_GNE_timedata(dataframe,
+                               date,
+                               datatype="time diff",
+                               ):
+    """
+    Wilcoxon test. Answering if the delay time diff between GNE and GN is larger than zero.
+    H0: The delay time diffence between the GNE and GN is equal or smaller than zero.
+    
+    Input:
+    ------
+    dataframe: pandas dataframe, contains categories: parameter, rel change, two_networks, time diff
+    date: string, todays date. used in filename of csv file
+    
+    Output
+    ------
+    csv file named: wilcoxon_test_{dataframe['two_networks'].unique()[0]}_{date}.csv
+    
+    """
+    wilcoxon_test_results=[]
+    
+    alpha_005 = 0.05
+    alpha_001 = 0.01
+    alpha_0001 = 0.001
+    
+    for param in dataframe["parameter"].unique():
+        for change in dataframe["rel change"].unique():
+            
+            # filter for param and change
+            mask = (dataframe["parameter"]==param) & (dataframe["rel change"]==change)
+            dataframe_param_change = dataframe[mask][datatype].reset_index(drop=True)
+            
+            if not dataframe_param_change.empty:
+                
+                # Perform the one-sample Wilcoxon signed-rank test
+                stat, p_value = wilcoxon(dataframe_param_change, alternative='greater', zero_method='wilcox')
+            else:
+                continue
+                
+            if p_value > alpha_005:
+                reject_005 = False     #Fail to reject H₀: no evidence that delay time diff > 0
+            elif p_value < alpha_005:
+                reject_005 = True
+                
+            if p_value > alpha_001:
+                reject_001 = False
+            elif p_value < alpha_001:
+                reject_001 = True
+                
+            if p_value > alpha_0001:
+                reject_0001 = False
+            elif p_value < alpha_0001:
+                reject_0001 = True
+                
+            # sample data
+            data = {"network":dataframe["two_networks"].unique()[0],
+                    "parameter": param,
+                    "rel change": change,
+                    "p value":p_value,
+                    "reject 0.05": reject_005,
+                    "reject 0.01": reject_001,
+                    "reject 0.001": reject_0001
+            }
+            wilcoxon_test_results.append(data)
+    df_wilcoxon_test_results = pd.DataFrame(wilcoxon_test_results)
+    df_wilcoxon_test_results.to_csv(f"wilcoxon_test_{dataframe['two_networks'].unique()[0]}_{date}.csv", index=False)
+    print(f"Wilcoxon test results are saved in csv file wilcoxon_test_{dataframe['two_networks'].unique()[0]}_{date}.csv")
