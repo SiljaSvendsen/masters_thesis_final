@@ -1,15 +1,23 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import scipy as sp
 from scipy.integrate import solve_ivp
 from scipy.optimize import root, fsolve
+# Statistical test
+import scipy.stats as stats
+from scipy.stats import shapiro
+from scipy.stats import mannwhitneyu
+# analytic solutions
 import sympy as sb
 import math
+# reading files
 import pandas as pd
-import seaborn as sns
-from matplotlib.patches import Patch
 import glob
 import os
+# plotting
+import matplotlib.pyplot as plt
+import seaborn as sns
+from matplotlib.patches import Patch
+
 
 import numpy as np
 
@@ -1662,3 +1670,189 @@ def func_bifurcation_diagram_one_par(model_2D, par, key,filename,
         return tri_stable
     if return_quadstable:
         return quadstable
+
+
+# statistical tests
+def shapiro_wilk_test_and_plots(dataframe,
+                                network, # or "network" (velocity data)
+                                datatype, # or "velocity"
+                                date,
+                                alpha_shapiro = 0.05,
+                                verbose=True, # plot the distribution
+                                savefig=True): # save the distribution
+    
+    """
+    17.oct.2024
+    dataframe: pandas dataframe, diff_tau_all or velocity_all.
+               (read notebook "statistical analysis on PSA data")
+    network:  string, if delay time diff, use "two_networks". If velocity data, use "network"
+    datatype: string, "time_diff" or "velocity"
+    date:     string, date of today
+    alpha_shapiro: float, significance level = 0.05 by default
+    verbose:  boolean, if True, it plots the distrbutions
+    savefig:  boolean, if True, it saves the plotted distributions with filename
+              "f"{datatype}_dist_{nets}_{param}_{change}_{date}.pdf""
+             
+    """
+    # sample data
+    shapiro_test_results = []
+
+    for nets in dataframe[network].unique():
+        for param in dataframe["parameter"].unique():
+            for change in dataframe["rel change"].unique():
+                
+                # handle one condition at a time
+                mask_networks = dataframe[network]==nets
+                mask_param = dataframe["parameter"]==param
+                mask_relchange = dataframe["rel change"]==change
+                
+                # which datatype
+                if datatype=="time_diff":
+                    analyse_data = dataframe[mask_networks & mask_param & mask_relchange]["time diff"]
+                    xlabel=r"$\Delta\tau$"
+                if datatype=="velocity":
+                    analyse_data = dataframe[mask_networks & mask_param & mask_relchange]["velocity"]
+                    xlabel="Velocity"
+                
+                
+                #condition 1 and 2
+                condition1 = dataframe[mask_networks & mask_param & mask_relchange]["condition 1"].unique()[0]
+                condition2 = dataframe[mask_networks & mask_param & mask_relchange]["condition 2"].unique()[0]
+                
+                # perform shapiro wilk test
+                stat, p_value = shapiro(analyse_data)
+                
+                
+                # check if we reject the null hypothesis (normality)
+                if p_value > alpha_shapiro:
+                    reject = False #Fail to reject H₀: Data looks normally distributed
+                else:
+                    reject = True  #Reject H₀: Data does not look normally distributed
+                
+                #print(nets, param, change, p_value, alpha_shapiro, reject)
+                
+                # plot the distribution
+                if verbose:
+                    Nbins = int(np.sqrt(len(analyse_data)))
+                    plt.figure()
+                    freq, bins, patches = plt.hist(analyse_data, bins=Nbins)
+                    plt.xlabel(xlabel)
+                    plt.ylabel("Frequency")
+                    plt.title(f"Nbins={Nbins}, p-value = {'{:.2e}'.format(p_value)}, reject = {reject} \n network = {nets} parameter = {param}, rel. change = {change}, \n bistable={condition1}, ref_sfp: {condition2}",
+                              fontsize=10)
+                    plt.tight_layout()
+                    if savefig:
+                        plt.savefig(f"{datatype}_dist_{nets}_{param}_{change}_{date}.pdf", dpi=600)
+                    plt.close()
+                
+                
+                data = {"networks": nets,
+                        "parameter":param,
+                        "rel change":change,
+                        "p_value": p_value,
+                        "significance level":alpha_shapiro,
+                        "reject": reject,
+                        "condition 1": condition1,
+                        "condition 2": condition2,
+                       }
+                
+                shapiro_test_results.append(data)
+
+    # Convert the list of dictionaries into a Pandas DataFrame
+    df_shapiro_results = pd.DataFrame(shapiro_test_results)
+
+    # Export the DataFrame to a CSV file
+    df_shapiro_results.to_csv(f"shapiro_test_results_{datatype}_{date}.csv", index=False)
+
+    print(f"Shapiro-Wilk test results saved to shapiro_test_results{datatype}_{date}.csv")
+    
+def MW_test(df_compare,
+            df_ref,
+            datatype,
+            date,
+            alternative,
+           ):
+    """
+    17.oct.24
+    One-sided Mann-Whitney U-test using scipy.stats package.
+    
+    H0: the time_diff in df_compare is equal to or smaller than the time_diff in df_ref (alternative="greater").
+    H0: the "velocity" in df_compare is equal to or larger than the "velocity" in df_ref (alternative="less")
+    
+    Input:
+    -------
+    df_compare: pandas dataframe, contains only data for one network
+    df_ref:     pandas dataframe, contains only data for one network
+    datatype:   string, "time diff" or "velocity"
+    date:       string, todays date
+    alternative: string, greater or less. depends on the null hypothesis.
+    
+    Output:
+    -------
+    csv file with MW-results
+    
+    """
+    
+    # significance levels
+    alpha_mannwhitney_005 = 0.05
+    alpha_mannwhitney_001 = 0.01
+    alpha_mannwhitney_0001=0.001
+    
+    # to the data csv file
+    if datatype=="time diff":
+        networktype = "two_networks"
+    if datatype=="velocity":
+        networktype = "network"
+
+    MWresults = []
+    # the function
+    for param in df_compare["parameter"].unique():
+        for change in df_compare["rel change"].unique():
+            
+            # prepare/ organise data
+            mask_compare = (df_compare["parameter"]==param) & (df_compare["rel change"]==change)
+            mask_reference = (df_ref["parameter"]==param) & (df_ref["rel change"]==change)
+            
+            df_compare_param_change = df_compare[mask_compare][datatype].reset_index(drop=True)
+            df_ref_param_change = df_ref[mask_reference][datatype].reset_index(drop=True)
+            
+            if not df_compare_param_change.empty and not df_ref_param_change.empty:
+                
+                # perfrom one sided mann whitney u test
+                u_stat, p_value = mannwhitneyu(df_compare_param_change, df_ref_param_change, alternative=alternative)
+            else:
+                continue #skip if either dataframe is empty.
+            
+            # check if we can reject the null hypothesis
+            
+            if p_value > alpha_mannwhitney_005:
+                reject_005 = False #Fail to reject H₀: no evidence that df_compare > df_ref
+            elif p_value < alpha_mannwhitney_005:
+                reject_005 = True
+            
+            if p_value > alpha_mannwhitney_001:
+                reject_001 = False
+            elif p_value < alpha_mannwhitney_001:
+                reject_001 = True
+            
+            if p_value > alpha_mannwhitney_0001:
+                reject_0001 = False
+            elif p_value < alpha_mannwhitney_0001:
+                reject_0001 = True
+                
+            data = {"df compare": df_compare[networktype].unique()[0],
+                    "df ref": df_ref[networktype].unique()[0],
+                    "parameter":param,
+                    "rel change": change,
+                    "p-value":p_value,
+                    "reject 0.05":reject_005,
+                    "reject 0.01":reject_001,
+                    "reject 0.001": reject_0001
+                   }
+            MWresults.append(data)
+            
+    df_mannwhitney_results = pd.DataFrame(MWresults)
+
+    # Export the DataFrame to a CSV file
+    df_mannwhitney_results.to_csv(f"MW_results_{datatype}_{df_compare[networktype].unique()[0]}_{df_ref[networktype].unique()[0]}_{date}.csv", index=False)
+    print(f"Mann-Whitney U test results are saved to MW_results_{datatype}_{df_compare[networktype].unique()[0]}_{df_ref[networktype].unique()[0]}_{date}.csv ")
