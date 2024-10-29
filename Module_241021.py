@@ -1281,6 +1281,7 @@ def plot_bifurcation_diagram_gata_nanog_alpha_kmiNG(dataframe,
                     verticalalignment='center',
                     horizontalalignment='center',
                     bbox=dict(facecolor='white', edgecolor='none', pad=2.0))  # White background box
+    
     # 0. data
     x = dataframe["rel change"]
     gata6 = dataframe["ss gata6"]
@@ -1311,6 +1312,19 @@ def plot_bifurcation_diagram_gata_nanog_alpha_kmiNG(dataframe,
     for text_i, y_i in zip(["GATA6 ", "NANOG", "GATA6 ", "NANOG"],[1.10273171,11.46535802,13.62042978,2.41356951]):
         annotate_axhline(text=text_i,y=np.log2(y_i), ax=ax)
 
+    #2.4 indicate bi-stability
+    stability_lst = []
+    bifur_range=np.sort(np.unique(dataframe["rel change"].to_numpy()))
+    for s in bifur_range:
+        mask = dataframe["rel change"]==s
+        stability=len(np.unique(np.round(dataframe[mask]["ss nanog"].to_numpy())))
+        stability_lst.append(stability)
+    bistable_start = bifur_range[np.where(np.array(stability_lst)==2)[0][0]] # first 0 = unpack tuple, second 0 = get first element
+    bistable_stop = bifur_range[np.where(np.array(stability_lst)==2)[0][-1]]
+    
+    print("bi-stable in scale factor range:",bistable_start, bistable_stop)
+    ax.fill_betweenx([0, np.log2(ymax)], np.log2(bistable_start), np.log2(bistable_stop), color="lightblue", alpha=0.2)
+    
     # 3. title, axis label, legend
     ax.set_title(f"{dataframe['network'].unique()[0]}", fontsize=font_size_axis_title)
     ax.set_xlabel("Scale Factor", fontsize=font_size_axis_title)
