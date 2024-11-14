@@ -2404,3 +2404,72 @@ def wilcoxon_test_GNE_timedata(dataframe,
     df_wilcoxon_test_results = pd.DataFrame(wilcoxon_test_results)
     df_wilcoxon_test_results.to_csv(f"wilcoxon_test_{dataframe['two_networks'].unique()[0]}_{date}.csv", index=False)
     print(f"Wilcoxon test results are saved in csv file wilcoxon_test_{dataframe['two_networks'].unique()[0]}_{date}.csv")
+
+
+
+def plot_distributions_at_diff_scale_factors(dataframe, network, parameter, scalefactor_array,
+                                             title, x_label, date, font_size=30, font_size_legend=14,
+                                             datatype="time diff",legend_loc="best",xmin=-25, xmax=15,
+                                             savefig=False):
+
+    """
+    Created: 05.11.2024
+    plot multiple histograms in one figure.
+    If savefig=True, the figure is saved as "{datatype}_distributions_{parameter}_{date}.pdf" with dpi=600.
+    
+    input:
+    dataframe: pandas dataframe containing categories "two_networks" if datatype="time diff" or "network" if datatype="velocity",
+               "parameter", and "rel change"
+    network:   string, possible values "GNEvGN", "GNEO1vGN", "GNEO2vGN"
+    paraemter: string, possible values (see par0)
+    scalefactor_array: list or numpy array, possible values are 0.2, 0.25, 0.5, 0.75, 1.0, 1.25, 2.0, 3.0, 4.0, and 5.0
+    title:     string
+    x_label:   string
+    date:      string
+    
+    """
+
+    # colors of the histograms
+    color_array = ["cornflowerblue", "darkorange", "darkorchid", "lightseagreen"]
+    
+    # filters/ masks
+    if datatype=="time diff":
+        mask0 = dataframe["two_networks"]==network
+    if datatype=="velocity":
+        mask0 = dataframe["network"]==network
+
+    mask1 = dataframe["parameter"]==parameter
+    
+    # reference data
+    maskref = dataframe["rel change"]==1.0
+    ref_data = dataframe[mask0 & mask1 & maskref][datatype]
+    Nbins = int(np.sqrt(len(ref_data)))
+    
+    # create figure + plot reference data
+    plt.figure(figsize=(6,5))
+    freqref, binsref, patchesref = plt.hist(ref_data, bins=Nbins, density=True, histtype="step",
+                                           color="black", label="s = 1.0")
+
+    # plot comparison data
+    for color, scalefactor in zip(color_array[:len(scalefactor_array)], scalefactor_array):
+        
+        mask2 = dataframe["rel change"]==scalefactor    
+        analyse_data = dataframe[mask0 & mask1 & mask2][datatype]
+        freq, bins, patches = plt.hist(analyse_data, bins=Nbins, density=True, histtype="step",
+                                       color=color, label=f"s = {scalefactor}")
+        
+    # figure title, axis labels
+    plt.title(f"{title}", fontsize=font_size)
+    plt.xlabel(x_label, fontsize=font_size)
+    plt.ylabel("Normalised to unity", fontsize=font_size_legend)
+    plt.legend(loc=legend_loc,fontsize=font_size_legend)
+    
+    # adjust + save
+    plt.xlim(xmin, xmax)
+    plt.tight_layout()
+    
+    if savefig:
+        plt.savefig(f"{datatype}_distributions_{parameter}_{date}.pdf", dpi=600)
+
+    
+
