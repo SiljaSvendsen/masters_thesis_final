@@ -693,7 +693,7 @@ def ss_coord_and_delay_time(points_ic, par, model):
 
 # DATA SAMPLING
 
-def condition_2(SFP, SFP_ref, threshold=0.1):
+def condition_2(SFP, SFP_ref, threshold=0.2):
     '''
     SFP: (2,dim) array, GNE-F or GNEO-F using updated parameter set.
     SFP_ref: (2,2) array, GN-F ss using reference parameter set.
@@ -706,7 +706,7 @@ def condition_2(SFP, SFP_ref, threshold=0.1):
     # Ensure to sort the SFP as EPI, PRE
     SFP =  SFP[SFP[:,0].argsort()][:,:2] # [:,:2] means I keep gata, nanog - cut out esrrb and oct4.
                                          # argsort ensures that I compare epi with epi and gata with gata.
-    SFP_ref= SFP_ref[SFP_ref[:,0].argsort()] #SFP_ref only contrains gata, nanog
+    SFP_ref= SFP_ref[SFP_ref[:,0].argsort()] #SFP_ref only contains gata, nanog
     
     # Calculate the relative change in coordinates of SFP
     rel_change_coord = (SFP-SFP_ref)/SFP_ref
@@ -723,6 +723,77 @@ def euclidean_distance(start_arr, final_arr):
     Use to calculate the velocity.
     """
     return np.sqrt(np.sum((final_arr-start_arr)**2, axis=-1))
+
+
+#
+def sample_trajectories_till_steady_state(model, tmax, ic, parameters, date, filename_prefix):
+    '''
+    Integrates ODE's specified by "model" and returns the time it takes for the system to get to steady state.
+    Trajectories and time points are saved to a CSV file with filename "filename_prefix_trajectories_date.csv".
+
+    Input:
+    -------
+    model:      function,
+    tmax:       float, time point that has to be after steady state is reached.
+    ic:         tuple/ array/ list
+    parameters: dictionary
+    date:       string
+    filename_prefix: string
+    '''
+
+    def find_time_ss(sol):
+        count = 0
+        dcount = 5
+        slope = 10 # some high number
+        ss_threshold = 0.01 # convergence
+
+        # note: in case ss isn't reached within tmax, the time condition is added.
+        while sol.t[count] < sol.t[-1] and slope > ss_threshold:
+            if count-dcount > 0: # ensure that the previous element exists
+                # I measure the relative change in Nanog and Gata6 levels between time point i-5 and i.
+                # I use the max relative change as a condition.
+                slope = np.max((sol.y[:2, count]-sol.y[:2, count-dcount])/sol.y[:2, count-dcount])
+            count += 1
+        
+        return count
+
+    def save_trajectories_to_csv(sol, count_ss, date, filename_prefix):
+        # Get time points and variable data up to steady state
+        timepoints = sol.t[:count_ss]
+        trajectories = sol.y[:, :count_ss]  
+
+        # Prepare data for CSV
+        data_dict = {"time": timepoints}  # Include time as the first column
+        num_variables = trajectories.shape[0]  # Determine the number of variables
+
+        # Add each variable's trajectory dynamically
+        for i in range(num_variables):
+            data_dict[f"variable_{i+1}"] = trajectories[i, :]
+
+        # Convert to a DataFrame
+        df_trajectories = pd.DataFrame(data_dict)   
+
+        # Save to CSV with a timestamped filename
+        filename = f"{filename_prefix}_trajectories_{date}.csv"
+        df_trajectories.to_csv(filename, index=False)
+        print(f"Trajectories saved to CSV file: {filename}")
+
+
+        # Get steady state index
+        count_ss = find_time_ss(sol)
+
+        # Save the trajectories to a CSV file
+        save_trajectories_to_csv(sol, count_ss, filename_prefix)
+
+        # Return the sliced data and timepoints
+        return sol.y[:, 0:count_ss], sol.t[:count_ss]
+    
+    sol = solve_ivp(model,(0,tmax), ic, args=[parameters])
+
+    count_ss = find_time_ss(sol)
+
+    save_trajectories_to_csv(sol, count_ss, date, filename_prefix)
+
 
 
 # PLOT DATA

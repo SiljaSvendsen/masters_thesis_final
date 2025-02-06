@@ -1,0 +1,40 @@
+# Fit Statistics on system: GNEvGN_KaaNG_s4_skewedgaussian_240106
+# ===============================================
+#  
+# Initial Guesses:
+# ==================
+# sigma: 2.0
+# mu: -17
+# alpha: 1.0
+#  
+# Chi2 fit Results:
+# ==================
+# Limits:
+# sigma: (0.0, inf)
+# mu: (-inf, inf)
+# alpha: (0.0, inf)
+# Chi2 = 336.528887273947
+# Ndof = 30
+# P(Chi2, Ndof) = 1.5298183298953767e-53
+# Fit parameter values:
+# sigma: 1.66  ± 0.04
+# mu: -17.08  ± 0.17
+# alpha: 0.00  ± 1.15
+#  
+# Unbinned Log-Likelihood (UBLL) fit Results:
+# ============================================
+# Limits:
+# sigma: (1.0, 2.0)
+# mu: (-19.0, -17.0)
+# alpha: (0.3, 10.0)
+# Max LL = -7186.902400205519
+# Fit parameter values:
+# sigma: 2.00  ± 0.00
+# mu: -17.00  ± 0.00
+# alpha: 0.32  ± 0.03
+#  
+# AIC and bias-corrected AIC
+# ===========================
+# AIC = 14379.804800411039
+# AICc = 14380.632386617935
+#  

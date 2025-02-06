@@ -155,6 +155,14 @@ def bias_corrected_AIC(nll, n, k):
     aicc = aic + 2 * k * (k + 1) / (n - k - 1)
     return aicc
 
+#######################################
+# Define weight factors function      #
+#######################################
+
+def weights_twomodels(x, xmin):
+    return 1/(1 + np.exp(0.5 * (x-xmin)))
+
+
 #######################################################
 # Define function to select data from a specific file #
 #######################################################
